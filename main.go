@@ -52,7 +52,7 @@ func NewClient() (client.Client, error) {
 	})
 }
 
-func DetectRancherProxy(cfg *rest.Config) (*rancher.Client, bool, error) {
+func DetectRancherProxy(cfg *rest.Config) (*clientbase.ClientOpts, bool, error) {
 	err := rest.LoadTLSFiles(cfg)
 	if err != nil {
 		return nil, false, err
@@ -77,8 +77,8 @@ func DetectRancherProxy(cfg *rest.Config) (*rancher.Client, bool, error) {
 			CACerts:  string(cfg.CAData),
 			// Insecure:   true,
 		}
-		rc, err := rancher.NewClient(&opts)
-		return rc, err == nil, err
+		_, err = rancher.NewClient(&opts)
+		return &opts, err == nil, err
 	}
 	return nil, false, nil
 }
