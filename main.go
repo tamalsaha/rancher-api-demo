@@ -4,19 +4,96 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/restmapper"
+	"k8s.io/klog/v2"
+	"net/url"
 	"os"
+	"sigs.k8s.io/yaml"
 	"time"
 
 	"github.com/rancher/norman/clientbase"
-	client "github.com/rancher/rancher/pkg/client/generated/management/v3"
-	"sigs.k8s.io/yaml"
+	rancher "github.com/rancher/rancher/pkg/client/generated/management/v3"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/discovery/cached/memory"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
+	clustermeta "kmodules.xyz/client-go/cluster"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 )
 
+func NewClient() (client.Client, error) {
+	scheme := runtime.NewScheme()
+	_ = clientgoscheme.AddToScheme(scheme)
+
+	ctrl.SetLogger(klog.NewKlogr())
+	cfg := ctrl.GetConfigOrDie()
+	cfg.QPS = 100
+	cfg.Burst = 100
+
+	hc, err := rest.HTTPClientFor(cfg)
+	if err != nil {
+		return nil, err
+	}
+	mapper, err := apiutil.NewDynamicRESTMapper(cfg, hc)
+	if err != nil {
+		return nil, err
+	}
+
+	return client.New(cfg, client.Options{
+		Scheme: scheme,
+		Mapper: mapper,
+		//Opts: client.WarningHandlerOptions{
+		//	SuppressWarnings:   false,
+		//	AllowDuplicateLogs: false,
+		//},
+	})
+}
+
+func DetectRancherProxy(cfg *rest.Config) (*rancher.Client, bool, error) {
+	err := rest.LoadTLSFiles(cfg)
+	if err != nil {
+		return nil, false, err
+	}
+
+	kc, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		return nil, false, err
+	}
+
+	mapper := restmapper.NewDeferredDiscoveryRESTMapper(memory.NewMemCacheClient(kc))
+	if clustermeta.IsRancherManaged(mapper) {
+		u, err := url.Parse(cfg.Host)
+		if err != nil {
+			return nil, false, err
+		}
+		u.Path = "/v3"
+
+		opts := clientbase.ClientOpts{
+			URL:      u.String(),
+			TokenKey: cfg.BearerToken,
+			CACerts:  string(cfg.CAData),
+			// Insecure:   true,
+		}
+		rc, err := rancher.NewClient(&opts)
+		return rc, err == nil, err
+	}
+	return nil, false, nil
+}
+
 func main() {
-	err := doStuff()
+	_, yes, err := DetectRancherProxy(ctrl.GetConfigOrDie())
 	if err != nil {
 		panic(err)
 	}
+	fmt.Println("Rancher proxy enabled:", yes)
+
+	//err := doStuff()
+	//if err != nil {
+	//	panic(err)
+	//}
 }
 
 func doStuff() error {
@@ -30,7 +107,7 @@ func doStuff() error {
 		Insecure:   true,
 		ProxyURL:   "",
 	}
-	rc, err := client.NewClient(&opts)
+	rc, err := rancher.NewClient(&opts)
 	if err != nil {
 		var apiErr *clientbase.APIError
 		if errors.As(err, &apiErr) {
@@ -57,7 +134,7 @@ func doStuff() error {
 	//	fmt.Println(item.Name)
 	//}
 
-	token, err := rc.Token.ByID("token-zzknb")
+	token, err := rc.Token.ByID("kubeconfig-user-nzj6blxgh2")
 	if err != nil {
 		return err
 	}
@@ -71,7 +148,8 @@ func doStuff() error {
 	}
 	fmt.Println(token.ExpiresAt, expiresAt.Format(time.RFC3339))
 
-	nt, err := rc.Token.Create(&client.Token{
+	nt, err := rc.Token.Create(&rancher.Token{
+		Name:        "tamal-token",
 		Description: fmt.Sprintf("monitoring-operator-token-%d", time.Now().Unix()),
 		TTLMillis:   90 * 24 * time.Hour.Milliseconds(),
 	})
