@@ -1,14 +1,15 @@
 package main
 
 import (
+	"encoding/base64"
+	"errors"
 	"fmt"
 	"os"
-	"sigs.k8s.io/yaml"
 	"time"
 
 	"github.com/rancher/norman/clientbase"
-	"github.com/rancher/norman/types"
 	client "github.com/rancher/rancher/pkg/client/generated/management/v3"
+	"sigs.k8s.io/yaml"
 )
 
 func main() {
@@ -31,15 +32,30 @@ func doStuff() error {
 	}
 	rc, err := client.NewClient(&opts)
 	if err != nil {
+		var apiErr *clientbase.APIError
+		if errors.As(err, &apiErr) {
+			fmt.Println(apiErr.StatusCode)
+		}
 		return err
 	}
-	coll, err := rc.Token.ListAll(&types.ListOpts{})
+
+	kluster, err := rc.Cluster.ByID("c-m-8nmjt9cj")
 	if err != nil {
 		return err
 	}
-	for _, item := range coll.Data {
-		fmt.Println(item.Name)
+	caCrt, err := base64.StdEncoding.DecodeString(kluster.CACert)
+	if err != nil {
+		return err
 	}
+	fmt.Println(string(caCrt))
+
+	//coll, err := rc.Token.ListAll(&types.ListOpts{})
+	//if err != nil {
+	//	return err
+	//}
+	//for _, item := range coll.Data {
+	//	fmt.Println(item.Name)
+	//}
 
 	token, err := rc.Token.ByID("token-zzknb")
 	if err != nil {
