@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"k8s.io/client-go/kubernetes"
@@ -84,16 +83,16 @@ func DetectRancherProxy(cfg *rest.Config) (*clientbase.ClientOpts, bool, error) 
 }
 
 func main() {
-	_, yes, err := DetectRancherProxy(ctrl.GetConfigOrDie())
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println("Rancher proxy enabled:", yes)
-
-	//err := doStuff()
+	//_, yes, err := DetectRancherProxy(ctrl.GetConfigOrDie())
 	//if err != nil {
 	//	panic(err)
 	//}
+	//fmt.Println("Rancher proxy enabled:", yes)
+
+	err := doStuff()
+	if err != nil {
+		panic(err)
+	}
 }
 
 func doStuff() error {
@@ -116,15 +115,15 @@ func doStuff() error {
 		return err
 	}
 
-	kluster, err := rc.Cluster.ByID("c-m-8nmjt9cj")
-	if err != nil {
-		return err
-	}
-	caCrt, err := base64.StdEncoding.DecodeString(kluster.CACert)
-	if err != nil {
-		return err
-	}
-	fmt.Println(string(caCrt))
+	//kluster, err := rc.Cluster.ByID("c-m-8nmjt9cj")
+	//if err != nil {
+	//	return err
+	//}
+	//caCrt, err := base64.StdEncoding.DecodeString(kluster.CACert)
+	//if err != nil {
+	//	return err
+	//}
+	//fmt.Println(string(caCrt))
 
 	//coll, err := rc.Token.ListAll(&types.ListOpts{})
 	//if err != nil {
@@ -149,8 +148,8 @@ func doStuff() error {
 	fmt.Println(token.ExpiresAt, expiresAt.Format(time.RFC3339))
 
 	nt, err := rc.Token.Create(&rancher.Token{
-		Name:        "tamal-token",
-		Description: fmt.Sprintf("monitoring-operator-token-%d", time.Now().Unix()),
+		// Name:        "tamal-token",
+		Description: fmt.Sprintf("monitoring-operator-%d", time.Now().Unix()),
 		TTLMillis:   90 * 24 * time.Hour.Milliseconds(),
 	})
 	if err != nil {
